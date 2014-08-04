@@ -153,8 +153,10 @@ bool Cexif::DecodeExif(const char *filename, int Thumb)
 		Data = (unsigned char *)malloc(itemlen);
 		if (Data == NULL)
 		{
-			strcpy(m_szLastError,"Could not allocate memory"); return false;
+			strcpy(m_szLastError,"Could not allocate memory");
+			return false;
 		}
+
 		Sections[SectionsRead].Data = Data;
 
 
