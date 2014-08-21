@@ -1,6 +1,7 @@
 from Screens.Screen import Screen
 from Components.Sources.CanvasSource import CanvasSource
 from Components.ActionMap import ActionMap, NumberActionMap
+from Tools.Directories import fileExists
 from enigma import gFont, getDesktop, gMainDC, eSize, RT_HALIGN_RIGHT, RT_WRAP
 
 def RGB(r,g,b):
@@ -12,8 +13,15 @@ class OverscanTestScreen(Screen):
 			<ePixmap pixmap="skin_default/overscan.png" position="0,0" size="1920,1080" zPosition="1" alphatest="on" />
 		</screen>"""
 
-	def __init__(self, session):
+	def __init__(self, session, xres=1280, yres=720):
 		Screen.__init__(self, session)
+
+		self.xres, self.yres = getDesktop(0).size().width(), getDesktop(0).size().height()
+
+		if (self.xres, self.yres) != (xres, yres):
+			gMainDC.getInstance().setResolution(xres, yres)
+			getDesktop(0).resize(eSize(xres, yres))
+			self.onClose.append(self.__close)
 
 		self["actions"] = NumberActionMap(["InputActions", "OkCancelActions"],
 		{
@@ -27,6 +35,10 @@ class OverscanTestScreen(Screen):
 			"cancel": self.cancel
 		})
 
+	def __close(self):
+		gMainDC.getInstance().setResolution(self.xres, self.yres)
+		getDesktop(0).resize(eSize(self.xres, self.yres))
+
 	def ok(self):
 		self.close(True)
 
@@ -36,20 +48,14 @@ class OverscanTestScreen(Screen):
 	def keyNumber(self, key):
 		self.close(key)
 
-class FullHDTestScreen(Screen):
+class FullHDTestScreen(OverscanTestScreen):
 	skin = """
 		<screen position="fill">
 			<ePixmap pixmap="skin_default/testscreen.png" position="0,0" size="1920,1080" zPosition="1" alphatest="on" />
 		</screen>"""
 
 	def __init__(self, session):
-		Screen.__init__(self, session)
-
-		self.xres, self.yres = getDesktop(0).size().width(), getDesktop(0).size().height()
-
-		if (self.xres, self.yres) != (1920, 1080):
-			gMainDC.getInstance().setResolution(1920, 1080)
-			getDesktop(0).resize(eSize(1920, 1080))
+		OverscanTestScreen.__init__(self, session, 1920, 1080)
 
 		self["actions"] = NumberActionMap(["InputActions", "OkCancelActions"],
 		{
@@ -63,23 +69,6 @@ class FullHDTestScreen(Screen):
 			"cancel": self.cancel
 		})
 
-	def switchbackResolution(self):
-		if (self.xres, self.yres) != (1920, 1080):
-			gMainDC.getInstance().setResolution(self.xres, self.yres)
-			getDesktop(0).resize(eSize(self.xres, self.yres))
-
-	def ok(self):
-		self.switchbackResolution()
-		self.close(True)
-
-	def cancel(self):
-		self.switchbackResolution()
-		self.close(False)
-
-	def keyNumber(self, key):
-		self.switchbackResolution()
-		self.close(key)
-
 class VideoFinetune(Screen):
 	skin = """
 		<screen position="fill">
@@ -91,6 +80,17 @@ class VideoFinetune(Screen):
 		self["Canvas"] = CanvasSource()
 
 		self.basic_colors = [RGB(255, 255, 255), RGB(255, 255, 0), RGB(0, 255, 255), RGB(0, 255, 0), RGB(255, 0, 255), RGB(255, 0, 0), RGB(0, 0, 255), RGB(0, 0, 0)]
+
+		if fileExists("/proc/stb/fb/dst_left"):
+			self.left = open("/proc/stb/fb/dst_left", "r").read()
+			self.width = open("/proc/stb/fb/dst_width", "r").read()
+			self.top = open("/proc/stb/fb/dst_top", "r").read()
+			self.height = open("/proc/stb/fb/dst_height", "r").read()
+			open("/proc/stb/fb/dst_left", "w").write("00000000")
+			open("/proc/stb/fb/dst_width", "w").write("000002d0")
+			open("/proc/stb/fb/dst_top", "w").write("00000000")
+			open("/proc/stb/fb/dst_height", "w").write("0000000240")
+			self.onClose.append(self.__close)
 
 		self["actions"] = NumberActionMap(["InputActions", "OkCancelActions"],
 		{
@@ -105,6 +105,12 @@ class VideoFinetune(Screen):
 			"cancel": self.close,
 		})
 		self.testpic_brightness()
+
+	def __close(self):
+		open("/proc/stb/fb/dst_left", "w").write(self.left)
+		open("/proc/stb/fb/dst_width", "w").write(self.width)
+		open("/proc/stb/fb/dst_top", "w").write(self.top)
+		open("/proc/stb/fb/dst_height", "w").write(self.height)
 
 	def keyNumber(self, key):
 		(self.testpic_brightness, self.testpic_contrast, self.testpic_colors, self.testpic_filter, self.testpic_gamma, self.testpic_overscan, self.testpic_fullhd)[key-1]()
@@ -147,7 +153,7 @@ class VideoFinetune(Screen):
 
 		c.writeText(xres / 10, yres / 6 - 40, xres * 3 / 5, 40, RGB(128,255,255), RGB(0,0,0), gFont("Regular", 40),
 			_("Brightness"))
-		c.writeText(xres / 10, yres / 6, xres * 4 / 7, yres * 4 / 6, RGB(255,255,255), RGB(0,0,0), gFont("Regular", 20),
+		c.writeText(xres / 10, yres / 6, xres / 2, yres * 4 / 6, RGB(255,255,255), RGB(0,0,0), gFont("Regular", 20),
 			_("If your TV has a brightness or contrast enhancement, disable it. If there is something called \"dynamic\", "
 				"set it to standard. Adjust the backlight level to a value suiting your taste. "
 				"Turn down contrast on your TV as much as possible.\nThen turn the brightness setting as "

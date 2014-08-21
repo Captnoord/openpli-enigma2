@@ -9,7 +9,7 @@ from Components.MovieList import AUDIO_EXTENSIONS, MOVIE_EXTENSIONS, DVD_EXTENSI
 from Components.PluginComponent import plugins
 from Components.ServiceEventTracker import ServiceEventTracker
 from Components.Sources.Boolean import Boolean
-from Components.config import config, ConfigBoolean, ConfigClock
+from Components.config import config, ConfigBoolean, ConfigClock, ConfigText
 from Components.SystemInfo import SystemInfo
 from Components.UsageConfig import preferredInstantRecordPath, defaultMoviePath, ConfigSelection
 from Components.Sources.StaticText import StaticText
@@ -835,29 +835,26 @@ class InfoBarEPG:
 			})
 
 	def getEPGPluginList(self, getAll=False):
-		pluginlist = [(p.name, boundFunction(self.runPlugin, p)) for p in plugins.getPlugins(where = PluginDescriptor.WHERE_EVENTINFO) \
-				if 'selectedevent' not in p.__call__.func_code.co_varnames]
-		if pluginlist:
-			from Components.ServiceEventTracker import InfoBarCount
-			if getAll or InfoBarCount == 1:
-				pluginlist.append((_("Show EPG for current channel..."), self.openSingleServiceEPG))
-			pluginlist.append((_("Multi EPG"), self.openMultiServiceEPG))
-			pluginlist.append((_("Current event EPG"), self.openEventView))
+		pluginlist = [(p.name, boundFunction(self.runPlugin, p), p.path) for p in plugins.getPlugins(where = PluginDescriptor.WHERE_EVENTINFO) \
+				if 'selectedevent' not in p.__call__.func_code.co_varnames] or []
+		from Components.ServiceEventTracker import InfoBarCount
+		if getAll or InfoBarCount == 1:
+			pluginlist.append((_("Show EPG for current channel..."), self.openSingleServiceEPG, "current_channel"))
+		pluginlist.append((_("Multi EPG"), self.openMultiServiceEPG, "multi_epg"))
+		pluginlist.append((_("Current event EPG"), self.openEventView, "event_epg"))
 		return pluginlist
 
 	def getDefaultEPGtype(self):
-		pluginlist = self.getEPGPluginList()
-		config.usage.defaultEPGType=ConfigSelection(default = "None", choices = pluginlist)
-		for plugin in pluginlist:
-			if plugin[0] == config.usage.defaultEPGType.value:
+		config.usage.defaultEPGType=ConfigText()
+		for plugin in self.getEPGPluginList():
+			if plugin[2] == config.usage.defaultEPGType.value:
 				return plugin[1]
 		return None
 
 	def getDefaultGuidetype(self):
-		pluginlist = self.getEPGPluginList()
-		config.usage.defaultGuideType=ConfigSelection(default = "None", choices = pluginlist)
-		for plugin in pluginlist:
-			if plugin[0] == config.usage.defaultGuideType.value:
+		config.usage.defaultGuideType=ConfigText(default="/usr/lib/enigma2/python/Plugins/Extensions/GraphMultiEPG")
+		for plugin in self.getEPGPluginList():
+			if plugin[2] == config.usage.defaultGuideType.value:
 				return plugin[1]
 		return None
 
@@ -1018,7 +1015,7 @@ class InfoBarEPG:
 	def DefaultInfoPluginChosen(self, answer):
 		if answer is not None:
 			self.defaultEPGType = answer[1]
-			config.usage.defaultEPGType.value = answer[0]
+			config.usage.defaultEPGType.value = answer[2]
 			config.usage.defaultEPGType.save()
 
 	def showEventGuidePlugins(self):
@@ -1039,7 +1036,7 @@ class InfoBarEPG:
 	def DefaultGuidePluginChosen(self, answer):
 		if answer is not None:
 			self.defaultGuideType = answer[1]
-			config.usage.defaultGuideType.value = answer[0]
+			config.usage.defaultGuideType.value = answer[2]
 			config.usage.defaultGuideType.save()
 
 	def openSimilarList(self, eventid, refstr):
@@ -1064,24 +1061,22 @@ class InfoBarEPG:
 				self.eventView.setEvent(self.epglist[0])
 
 	def showDefaultEPG(self):
-		if self.defaultEPGType is not None:
+		if self.defaultEPGType:
 			self.defaultEPGType()
-			return
-		self.openEventView()
+		else:
+			self.openEventView()
 
 	def showSingleEPG(self):
-		if self.defaultGuideType is not None:
+		if self.defaultGuideType:
 			self.defaultGuideType()
-			return
-		pluginlist = self.getEPGPluginList()
-		self.openSingleServiceEPG()
+		else:
+			self.openSingleServiceEPG()
 
 	def showMultiEPG(self):
-		if self.defaultGuideType is not None:
+		if self.defaultGuideType:
 			self.defaultGuideType()
-			return
-		pluginlist = self.getEPGPluginList()
-		self.openMultiServiceEPG()
+		else:
+			self.openMultiServiceEPG()
 
 	def openEventView(self):
 		from Components.ServiceEventTracker import InfoBarCount
@@ -2163,6 +2158,7 @@ class InfoBarInstantRecord:
 			{
 				"instantRecord": (self.instantRecord, _("Instant recording...")),
 			})
+		self.SelectedInstantServiceRef = None
 		if isStandardInfoBar(self):
 			self.recording = []
 		else:
@@ -2177,7 +2173,7 @@ class InfoBarInstantRecord:
 			self.recording.remove(self.recording[entry])
 
 	def getProgramInfoAndEvent(self, info, name):
-		info["serviceref"] = self.session.nav.getCurrentlyPlayingServiceOrGroup()
+		info["serviceref"] = self.SelectedInstantServiceRef or self.session.nav.getCurrentlyPlayingServiceOrGroup()
 
 		# try to get event info
 		event = None
@@ -2343,7 +2339,8 @@ class InfoBarInstantRecord:
 							identical += 1
 		return timers > identical
 
-	def instantRecord(self):
+	def instantRecord(self, serviceRef=None):
+		self.SelectedInstantServiceRef = serviceRef
 		pirr = preferredInstantRecordPath()
 		if not findSafeRecordPath(pirr) and not findSafeRecordPath(defaultMoviePath()):
 			if not pirr:
