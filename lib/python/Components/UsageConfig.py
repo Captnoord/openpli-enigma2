@@ -61,6 +61,7 @@ def InitUsageConfig():
 	config.usage.oldstyle_channel_select_controls = ConfigYesNo(default = False)
 	config.usage.zap_with_ch_buttons = ConfigYesNo(default = False)
 	config.usage.ok_is_channelselection = ConfigYesNo(default = False)
+	config.usage.volume_instead_of_channelselection = ConfigYesNo(default = False)
 	config.usage.show_spinner = ConfigYesNo(default = True)
 	config.usage.enable_tt_caching = ConfigYesNo(default = True)
 	choicelist = []
@@ -260,7 +261,10 @@ def InitUsageConfig():
 
 	if SystemInfo["WakeOnLAN"]:
 		def wakeOnLANChanged(configElement):
-			open(SystemInfo["WakeOnLAN"], "w").write(configElement.value and "on" or "off")
+			if "fp" in SystemInfo["WakeOnLAN"]:
+				open(SystemInfo["WakeOnLAN"], "w").write(configElement.value and "enable" or "disable")
+			else:
+				open(SystemInfo["WakeOnLAN"], "w").write(configElement.value and "on" or "off")
 		config.usage.wakeOnLAN = ConfigYesNo(default = False)
 		config.usage.wakeOnLAN.addNotifier(wakeOnLANChanged)
 
